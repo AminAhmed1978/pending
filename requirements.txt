@@ -1,5 +1,7 @@
 openai-whisper
-requests
-azure-cognitiveservices-speech
-streamlit
+transformers
 torch
+gtts
+tempfile
+os
+streamlit
