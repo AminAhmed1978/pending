@@ -1,56 +1,54 @@
-import whisper
-import requests
-from azure.cognitiveservices.speech import SpeechConfig, SpeechSynthesizer, AudioConfig
+import whisper # Import the whisper module
 import streamlit as st
+import tempfile
+import os
+from gtts import gTTS  # Import gTTS for text-to-speech
+from transformers import MBartForConditionalGeneration, MBart50TokenizerFast  # Import mBART models
 
 # Load Whisper model for transcription
-model = whisper.load_model("base")
+whisper_model = whisper.load_model("base")
 
-# Groq API details
-groq_api_url = "https://api.groq.com/v1/your-endpoint"  # Replace with the actual Groq API endpoint
-groq_api_key = "gsk_3U90LE9QszpPzMGIeDUYWGdyb3FYVTj75zH6gcWo7I4Ym28FU8gmY"
+# Load mBART model and tokenizer from Hugging Face
+mbart_model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
-# Set up Microsoft Azure for TTS
-speech_config = SpeechConfig(subscription="your_azure_subscription_key", region="your_azure_region")
-audio_config = AudioConfig(use_default_speaker=True)
-speech_synthesizer = SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+# Set the source and target language codes for Urdu
+source_lang = "ur_IN"
+target_lang = "ur_IN"
+tokenizer.src_lang = source_lang
 
-def get_groq_response(prompt):
-    """Generate a response using Groq API."""
-    headers = {
-        "Authorization": f"Bearer {groq_api_key}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "prompt": prompt,
-        "max_tokens": 150
-    }
-    
-    response = requests.post(groq_api_url, headers=headers, json=data)
-    if response.status_code == 200:
-        return response.json().get("response_text", "")
-    else:
-        print(f"Error: {response.status_code} - {response.text}")
-        return "Sorry, I couldn't generate a response."
+# Streamlit UI setup
+st.title("Voice-to-Voice Chatbot for Kids (in Urdu)")
 
-# Streamlit UI for the chatbot
-st.title("Urdu Voice-to-Voice Chatbot for Kids")
-st.write("Ask your question in Urdu by recording your voice.")
+# File uploader for audio input (wav, mp3, or m4a format)
+audio_file = st.file_uploader("Upload an audio file (Urdu)", type=["wav", "mp3", "m4a"])
 
-# Voice input from the user
-audio_input = st.file_uploader("Upload or record your voice in Urdu", type=["wav", "mp3"])
+if audio_file is not None:
+    # Save the uploaded audio temporarily
+    temp_file = tempfile.NamedTemporaryFile(delete=False)
+    temp_file.write(audio_file.read())
 
-if audio_input is not None:
-    # Transcribe the voice input using Whisper
-    transcription = model.transcribe(audio_input)["text"]
-    st.write(f"Question in Urdu: {transcription}")
+    # Transcribe audio to text (Urdu transcription)
+    transcription = whisper_model.transcribe(temp_file.name, language="ur")
+    st.write("Transcribed Text: ", transcription["text"])
 
-    # Generate a response using Groq API
-    response = get_groq_response(f"Respond in Urdu to the question: {transcription}")
-    st.write(f"Response in Urdu: {response}")
+    # Tokenize the transcription and generate a response using mBART
+    input_tokens = tokenizer(transcription["text"], return_tensors="pt")
+    generated_tokens = mbart_model.generate(**input_tokens)
+    response_text = tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
+    st.write("Chatbot Response: ", response_text)
 
-    # Convert response to speech using Azure TTS
-    result = speech_synthesizer.speak_text_async(response).get()
-    
-    # Play the generated audio response
-    st.audio(result.audio_data, format="audio/wav")
+    # Convert chatbot response back to speech using gTTS (Urdu language)
+    tts = gTTS(text=response_text, lang='ur')
+    tts_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+    tts.save(tts_file.name)
+
+    # Play the response audio
+    audio_file_path = tts_file.name
+    audio_bytes = open(audio_file_path, "rb").read()
+    st.audio(audio_bytes, format='audio/mp3')
+
+    # Clean up temporary files
+    temp_file.close()
+    os.unlink(temp_file.name)
+    os.unlink(tts_file.name)
