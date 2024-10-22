@@ -2,5 +2,4 @@ openai-whisper
 transformers
 torch
 gtts
-os
 streamlit
