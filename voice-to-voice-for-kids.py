@@ -8,7 +8,7 @@ model = whisper.load_model("base")
 
 # Groq API details
 groq_api_url = "https://api.groq.com/v1/your-endpoint"  # Replace with the actual Groq API endpoint
-groq_api_key = "your_groq_api_key"
+groq_api_key = "gsk_3U90LE9QszpPzMGIeDUYWGdyb3FYVTj75zH6gcWo7I4Ym28FU8gmY"
 
 # Set up Microsoft Azure for TTS
 speech_config = SpeechConfig(subscription="your_azure_subscription_key", region="your_azure_region")
