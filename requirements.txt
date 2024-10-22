@@ -1,6 +1,8 @@
+streamlit
 transformers
 torch
 whisper
 gtts
 sentencepiece
-streamlit
+pydub
+streamlit-webrtc
