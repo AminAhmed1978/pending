@@ -1,6 +1,6 @@
+transformers==4.30.0
+torch==2.0.0
 whisper
-transformers
-torch
-sentencepiece
 gtts
+sentencepiece
 streamlit
