@@ -1,8 +1,8 @@
-streamlit
-transformers
-torch
-whisper
+openai-whisper
+streamlit==1.25.0
+transformers==4.30.0
+torch==2.0.0
 gtts
 sentencepiece
 pydub
-streamlit-webrtc
+streamlit-webrtc==0.39.0
