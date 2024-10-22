@@ -11,7 +11,8 @@ import numpy as np
 from pydub import AudioSegment
 
 # Load the models
-whisper_model = whisper.load_model("base")
+# whisper_model = whisper.load_model("base")
+whisper_model = whisper.load_model("small")
 mbart_model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
