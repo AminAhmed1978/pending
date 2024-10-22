@@ -1,4 +1,4 @@
-whisper
+openai-whisper
 requests
 azure-cognitiveservices-speech
 streamlit
