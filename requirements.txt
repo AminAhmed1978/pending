@@ -1,5 +1,5 @@
-openai-whisper
 transformers
 torch
+sentencepiece
 gtts
 streamlit
