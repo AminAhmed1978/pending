@@ -1,57 +1,67 @@
-import whisper
-import torch
-from transformers import MBartForConditionalGeneration, MBart50Tokenizer  # mBART imports
-from gtts import gTTS
-import os
-import tempfile
 import streamlit as st
+from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+import torch
+from gtts import gTTS
+import streamlit_webrtc as webrtc
+import whisper
+import tempfile
+import os
+import io
+import numpy as np
+from pydub import AudioSegment
 
-# Load models
-model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-tokenizer = MBart50Tokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+# Load the models
+whisper_model = whisper.load_model("base")
+mbart_model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
-def transcribe_audio(audio_file):
-    st.write("Transcribing audio...")
-    # Use Whisper model to transcribe speech to text
-    whisper_model = whisper.load_model("base")
-    result = whisper_model.transcribe(audio_file)
-    return result['text']
+# Set the source and target language to Urdu
+source_lang = "ur"
+target_lang = "ur"
 
-def generate_response(input_text, source_lang, target_lang):
-    # Tokenize input
-    tokenizer.src_lang = source_lang
-    input_ids = tokenizer(input_text, return_tensors="pt").input_ids
-    # Generate translation
-    generated_ids = model.generate(input_ids, forced_bos_token_id=tokenizer.lang_code_to_id[target_lang])
-    output_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    return output_text
+# Streamlit layout
+st.title("Voice-to-Voice Chatbot for Kids - Urdu")
 
-def text_to_speech(text, lang='ur'):
-    # Convert text to speech using Google Text-to-Speech
-    tts = gTTS(text, lang=lang)
-    with tempfile.NamedTemporaryFile(delete=False) as temp_audio:
-        tts.save(temp_audio.name)
-        return temp_audio.name
+# WebRTC-based real-time audio capture
+def process_audio(audio_bytes):
+    # Save the audio in a temporary file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+        tmp_file.write(audio_bytes)
+        tmp_file.flush()
+        audio_path = tmp_file.name
 
-def main():
-    st.title("Voice-to-Voice Chatbot for Kids in Urdu")
-    st.write("Ask anything in Urdu, and get a response in Urdu!")
-    
-    # Upload audio file
-    audio_file = st.file_uploader("Upload an audio file", type=["wav", "mp3", "m4a"])
+    # Load audio and perform transcription using Whisper
+    audio = whisper.load_audio(audio_path)
+    result = whisper_model.transcribe(audio, language='ur')  # Transcribe in Urdu
+    st.write("You said (in Urdu):", result["text"])
 
-    if audio_file is not None:
-        # Transcribe audio to text
-        transcribed_text = transcribe_audio(audio_file)
-        st.write(f"Transcribed Text: {transcribed_text}")
-        
-        # Generate response
-        response_text = generate_response(transcribed_text, "ur_UR", "ur_UR")
-        st.write(f"Response Text: {response_text}")
-        
-        # Convert response text to speech
-        response_audio = text_to_speech(response_text)
-        st.audio(response_audio, format='audio/mp3')
+    # Generate response using mBART model
+    inputs = tokenizer(result["text"], return_tensors="pt")
+    translated_tokens = mbart_model.generate(**inputs, forced_bos_token_id=tokenizer.lang_code_to_id[target_lang])
+    translated_text = tokenizer.decode(translated_tokens[0], skip_special_tokens=True)
+    st.write("Chatbot's response:", translated_text)
 
-if __name__ == "__main__":
-    main()
+    # Convert the response text to speech (gTTS)
+    tts = gTTS(translated_text, lang=target_lang)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp_audio:
+        tts.save(tmp_audio.name)
+        st.audio(tmp_audio.name)
+
+# Real-time audio input from microphone
+webrtc_stream = webrtc.WebRtcMode.SENDONLY
+ctx = webrtc.StreamerContext(
+    mode=webrtc_stream, 
+    key="key"
+)
+
+# Button to process the real-time voice input
+if st.button("Record and Process Voice"):
+    if ctx.audio_frame:
+        audio_frame = ctx.audio_frame.to_ndarray()
+        # Convert the audio_frame to bytes for processing
+        audio_bytes = io.BytesIO()
+        audio = AudioSegment(audio_frame.tobytes(), sample_width=2, frame_rate=16000, channels=1)
+        audio.export(audio_bytes, format="wav")
+        audio_bytes.seek(0)
+        process_audio(audio_bytes.read())
+
