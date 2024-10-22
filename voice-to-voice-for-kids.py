@@ -1,54 +1,57 @@
-import whisper # Import the whisper module
-import streamlit as st
-import tempfile
+import whisper
+import torch
+from transformers import MBartForConditionalGeneration, MBart50Tokenizer  # mBART imports
+from gtts import gTTS
 import os
-from gtts import gTTS  # Import gTTS for text-to-speech
-from transformers import MBartForConditionalGeneration, MBart50TokenizerFast  # Import mBART models
+import tempfile
+import streamlit as st
 
-# Load Whisper model for transcription
-whisper_model = whisper.load_model("base")
+# Load models
+model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+tokenizer = MBart50Tokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
-# Load mBART model and tokenizer from Hugging Face
-mbart_model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
-tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+def transcribe_audio(audio_file):
+    st.write("Transcribing audio...")
+    # Use Whisper model to transcribe speech to text
+    whisper_model = whisper.load_model("base")
+    result = whisper_model.transcribe(audio_file)
+    return result['text']
 
-# Set the source and target language codes for Urdu
-source_lang = "ur_IN"
-target_lang = "ur_IN"
-tokenizer.src_lang = source_lang
+def generate_response(input_text, source_lang, target_lang):
+    # Tokenize input
+    tokenizer.src_lang = source_lang
+    input_ids = tokenizer(input_text, return_tensors="pt").input_ids
+    # Generate translation
+    generated_ids = model.generate(input_ids, forced_bos_token_id=tokenizer.lang_code_to_id[target_lang])
+    output_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    return output_text
 
-# Streamlit UI setup
-st.title("Voice-to-Voice Chatbot for Kids (in Urdu)")
+def text_to_speech(text, lang='ur'):
+    # Convert text to speech using Google Text-to-Speech
+    tts = gTTS(text, lang=lang)
+    with tempfile.NamedTemporaryFile(delete=False) as temp_audio:
+        tts.save(temp_audio.name)
+        return temp_audio.name
 
-# File uploader for audio input (wav, mp3, or m4a format)
-audio_file = st.file_uploader("Upload an audio file (Urdu)", type=["wav", "mp3", "m4a"])
+def main():
+    st.title("Voice-to-Voice Chatbot for Kids in Urdu")
+    st.write("Ask anything in Urdu, and get a response in Urdu!")
+    
+    # Upload audio file
+    audio_file = st.file_uploader("Upload an audio file", type=["wav", "mp3", "m4a"])
 
-if audio_file is not None:
-    # Save the uploaded audio temporarily
-    temp_file = tempfile.NamedTemporaryFile(delete=False)
-    temp_file.write(audio_file.read())
+    if audio_file is not None:
+        # Transcribe audio to text
+        transcribed_text = transcribe_audio(audio_file)
+        st.write(f"Transcribed Text: {transcribed_text}")
+        
+        # Generate response
+        response_text = generate_response(transcribed_text, "ur_UR", "ur_UR")
+        st.write(f"Response Text: {response_text}")
+        
+        # Convert response text to speech
+        response_audio = text_to_speech(response_text)
+        st.audio(response_audio, format='audio/mp3')
 
-    # Transcribe audio to text (Urdu transcription)
-    transcription = whisper_model.transcribe(temp_file.name, language="ur")
-    st.write("Transcribed Text: ", transcription["text"])
-
-    # Tokenize the transcription and generate a response using mBART
-    input_tokens = tokenizer(transcription["text"], return_tensors="pt")
-    generated_tokens = mbart_model.generate(**input_tokens)
-    response_text = tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
-    st.write("Chatbot Response: ", response_text)
-
-    # Convert chatbot response back to speech using gTTS (Urdu language)
-    tts = gTTS(text=response_text, lang='ur')
-    tts_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
-    tts.save(tts_file.name)
-
-    # Play the response audio
-    audio_file_path = tts_file.name
-    audio_bytes = open(audio_file_path, "rb").read()
-    st.audio(audio_bytes, format='audio/mp3')
-
-    # Clean up temporary files
-    temp_file.close()
-    os.unlink(temp_file.name)
-    os.unlink(tts_file.name)
+if __name__ == "__main__":
+    main()
