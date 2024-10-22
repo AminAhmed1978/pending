@@ -2,3 +2,4 @@ whisper
 requests
 azure-cognitiveservices-speech
 streamlit
+torch
